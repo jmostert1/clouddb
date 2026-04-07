@@ -3,8 +3,7 @@
 Console.WriteLine($"Welcome to JPM Bookstore");
 
 Bookstore bookstore = new Bookstore();
-bookstore.InitializeDatabase();
-bookstore.SeedBooks();
+bookstore.StartChangeStreamListener();
 string? option = "";
 
 
@@ -32,7 +31,7 @@ do
     {
         Console.WriteLine("Removing a Book...");
         // Code to remove a book
-        bookstore.Removebook();
+        bookstore.RemoveBook();
     }
     else if (option == "4")
     {
@@ -47,6 +46,7 @@ do
     else if (option == "6")
     {
         Console.WriteLine("Exiting...");
+        bookstore.StopChangeStreamListener();
     }
     else
     {
@@ -55,19 +55,21 @@ do
 
 } while (option != "6");
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
 // All of these basic requirements:
-// You must create a database for your program to use including at least one table to store data into.
+// You must create a database using a cloud service for your program to use including at least one table to store data into.
 
 // Your software must demonstrate the ability to insert, modify, delete, and retrieve (or query) data.
 
-// This module requires more than just creating the database and determining SQL commands. You must write software that builds the SQL commands, submits them, receives the results from the database, and uses the results in some way.
 
-//////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
 // One of these additional requirements:
 
-// Add additional tables to your database and perform a join in your software between two of the tables.
+// Receive notifications in your software when data in the cloud changes.
 
-// Use at least two of the aggregate functions to summarize numerical data in your database.
+// Create two or more tables that are related to each other.
 
-// Demonstrate the use of a column containing a date or time along with a query that demonstrates filtering within a date or time range.
+// Implement user authentication.

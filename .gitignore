@@ -9,6 +9,7 @@ obj/
 
 # VS Code
 .vscode/
+.env
 
 # User-specific files
 *.user

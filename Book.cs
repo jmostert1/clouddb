@@ -1,3 +1,6 @@
+//cloud database implementation using MongoDB
+using MongoDB.Bson;
+using MongoDB.Bson.Serialization.Attributes;
 
 
 //struct to group related stuff together
@@ -24,13 +27,22 @@ struct BookSummary
     }
 }
 
+//ignore fields it cant map
+[BsonIgnoreExtraElements]
 class Book
 {
-    public int id { get; set; }
-    public string title { get; set; } = "";
-    public string author { get; set; } = "";
-    public string genre { get; set; } = "";
-    public double price { get; set; }
-    public int stock { get; set; }
+//switch to Bson attributes to map the class properties to the MongoDB document fields
+
+//tells MongoDB that this property is the unique identifier for the document
+  [BsonId]
+  
+    [BsonRepresentation(BsonType.ObjectId)]
+    public string Id { get; set; } = "";
+
+    [BsonElement("title")]  public string Title  { get; set; } = "";
+    [BsonElement("author")] public string Author { get; set; } = "";
+    [BsonElement("genre")]  public string Genre  { get; set; } = "";
+    [BsonElement("price")]  public double Price  { get; set; }
+    [BsonElement("stock")]  public int    Stock  { get; set; }
 
 }

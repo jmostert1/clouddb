@@ -1,270 +1,211 @@
 
-using System;
-using System.Data;
-using Microsoft.Data.Sqlite;
+
+using MongoDB.Driver;
+using MongoDB.Bson;
 
 class Bookstore
 {
+    // MongoDB collection to store books
+    private readonly IMongoCollection<Book> _books;
 
-    //switched filepath to dbpath
-    private string dbPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data", "books.db");
 
-    //create db if doesnt exist
-    public void InitializeDatabase()
+    //Constructor
+    public Bookstore()
     {
-        //opens our db and closes when its done
-        using var connection = new SqliteConnection($"Data Source={dbPath}");
-        connection.Open();
+        //connect to MongoDB
+        string connectionString = LoadConnectionString();
+        var client   = new MongoClient(connectionString);
 
-        //our SQL to create the table
-        string createTable = @"
-            CREATE TABLE IF NOT EXISTS Books (
-                Id      INTEGER PRIMARY KEY AUTOINCREMENT,
-                Title   TEXT NOT NULL,
-                Author  TEXT NOT NULL,
-                Genre   TEXT NOT NULL,
-                Price   REAL NOT NULL,
-                Stock   INTEGER NOT NULL
-            );";
 
-        //execute our query for us
-        using var command = new SqliteCommand(createTable, connection);
-        //runs query, Nonquery means we dont want anything back
-        command.ExecuteNonQuery();
+        //database name is cse310 and collection name is bookstore
+        var database = client.GetDatabase("cse310");
+        _books = database.GetCollection<Book>("bookstore");
     }
 
 
-    public void SeedBooks()
+    
+
+    private string LoadConnectionString()
     {
-        using var connection = new SqliteConnection($"Data Source={dbPath}");
-        connection.Open();
+        //grab connection via the .env
 
-        // Check if table already has data â€” if so, skip seeding
-        string countQuery = "SELECT COUNT(*) FROM Books;";
-        using var countCommand = new SqliteCommand(countQuery, connection);
-        long count = (long)countCommand.ExecuteScalar()!;
 
-        if (count > 0) return; // Already has books, don't seed again
+        // Look for .env file in both the current directory and the base directory
+        string[] paths = {
+            Path.Combine(Directory.GetCurrentDirectory(), ".env"),
+            Path.Combine(AppContext.BaseDirectory, ".env")
+        };
 
-        string insert = @"
-        INSERT INTO Books (Title, Author, Genre, Price, Stock) VALUES
-        ('The Great Gatsby',                       'F. Scott Fitzgerald', 'Fiction',   10.99, 5),
-        ('To Kill a Mockingbird',                  'Harper Lee',          'Fiction',   12.49, 3),
-        ('1984',                                   'George Orwell',       'Dystopian',  9.99, 8),
-        ('The Hobbit',                             'J.R.R. Tolkien',      'Fantasy',   14.99, 6),
-        ('Harry Potter and the Sorcerer''s Stone', 'J.K. Rowling',        'Fantasy',   13.99, 10),
-        ('The Da Vinci Code',                      'Dan Brown',           'Thriller',  11.49, 4),
-        ('Brave New World',                        'Aldous Huxley',       'Dystopian', 10.49, 7),
-        ('The Catcher in the Rye',                 'J.D. Salinger',       'Fiction',    9.49, 2),
-        ('Pride and Prejudice',                    'Jane Austen',         'Romance',    8.99, 9),
-        ('The Alchemist',                          'Paulo Coelho',        'Adventure', 11.99, 5);";
+        // Read the .env file and extract the MONGODB_URI value
+        foreach (var path in paths)
+        {
+            if (!File.Exists(path)) continue;
+            foreach (var line in File.ReadAllLines(path))
+            {
+                var trimmed = line.Trim();
+                if (trimmed.StartsWith("MONGODB_URI="))
 
-        using var command = new SqliteCommand(insert, connection);
-        command.ExecuteNonQuery();
-
-        Console.WriteLine("Books loaded into database.");
+                // Return the connection string without the "MONGODB_URI=" prefix
+                    return trimmed.Substring("MONGODB_URI=".Length).Trim();
+            }
+        }
+        throw new InvalidOperationException("MONGODB_URI not found in .env file.");
     }
 
-
+  
 
     public void ViewBooks()
     {
-        //same code as earlier, established connection
-        using var connection = new SqliteConnection($"Data Source={dbPath}");
-        connection.Open();
 
-        //our standard SELECT query
-        string query = "SELECT Id, Title, Author, Genre, Price, Stock FROM Books;";
-
-        //execute our query using SqliteCommand(action, connection)
-        using var command = new SqliteCommand(query, connection);
-
-        using var reader = command.ExecuteReader();
-
+        // Fetch all books from the MongoDB collection and display them (using .Find)
+        //FilterDefinitetion = filter condition
+        var books = _books.Find(FilterDefinition<Book>.Empty).ToList();
         Console.WriteLine("Books in the Store:");
 
-        //read through the reader object row by row. values have to match the select query above, so we know the order of the columns
-        while (reader.Read())
+        // Use the BookSummary struct to display a summary of each book
+        for (int i = 0; i < books.Count; i++)
         {
-            int id = reader.GetInt32(0);
-            string title = reader.GetString(1);
-            string author = reader.GetString(2);
-            string genre = reader.GetString(3);
-            double price = reader.GetDouble(4);
-            int stock = reader.GetInt32(5);
+            // Create a BookSummary instance for the current book
+            var summary = new BookSummary(books[i].Title, books[i].Author, books[i].Price);
 
-
-            //same code before to now display from db instead of from the json.
-            BookSummary summary = new BookSummary(title, author, price);
-            Console.WriteLine($"[ID: {id}] Genre: {genre} | Stock: {stock}");
+            // Display the book's genre and stock, followed by the summary
+            Console.WriteLine($"[{i + 1}] Genre: {books[i].Genre} | Stock: {books[i].Stock}");
             Console.WriteLine($"  {summary.Display()}");
         }
-
-
     }
 
     public void AddBook()
     {
-        //Code to add a book
-        //ask user for book details
-        Console.Write("Enter book title: ");
-        string title = Console.ReadLine()!;
-        Console.Write("Enter book author: ");
-        string author = Console.ReadLine()!;
-        Console.Write("Enter book genre: ");
-        string genre = Console.ReadLine()!;
-        Console.Write("Enter book price: ");
-        double price = Convert.ToDouble(Console.ReadLine()!);
-        Console.Write("Enter book stock: ");
-        int stock = Convert.ToInt32(Console.ReadLine()!);
+        //user input for book details
+        Console.Write("Enter book title: ");  string title  = Console.ReadLine()!;
+        Console.Write("Enter book author: "); string author = Console.ReadLine()!;
+        Console.Write("Enter book genre: ");  string genre  = Console.ReadLine()!;
+        Console.Write("Enter book price: ");  double price  = Convert.ToDouble(Console.ReadLine()!);
+        Console.Write("Enter book stock: ");  int    stock  = Convert.ToInt32(Console.ReadLine()!);
 
-
-        //same code as earlier, established connection
-        using var connection = new SqliteConnection($"Data Source={dbPath}");
-        connection.Open();
-
-
-        //our insert query, @ symbol means exactly
-        string query = @"
-        INSERT INTO Books (Title, Author, Genre, Price, Stock)
-        VALUES (@title, @author, @genre, @price, @stock);";
-
-        using var command = new SqliteCommand(query, connection);
-        command.Parameters.AddWithValue("@title", title);
-        command.Parameters.AddWithValue("@author", author);
-        command.Parameters.AddWithValue("@genre", genre);
-        command.Parameters.AddWithValue("@price", price);
-        command.Parameters.AddWithValue("@stock", stock);
-
-        command.ExecuteNonQuery();
+        // Insert the new book into the MongoDB collection using .InsertOne
+        _books.InsertOne(new Book { Title = title, Author = author, Genre = genre, Price = price, Stock = stock });
         Console.WriteLine("Book added!");
-
-
-
-
     }
 
-
-    public void Removebook()
+    public void RemoveBook()
     {
-        //Code to remove a book
-        //ask user which book to remove
-        Console.Write("Enter the ID of the book to remove: ");
-        int idToRemove = Convert.ToInt32(Console.ReadLine()!);
+        // Display books and let user select which one to remove
+        var books = _books.Find(FilterDefinition<Book>.Empty).ToList();
+        if (books.Count == 0) { Console.WriteLine("No books found."); return; }
+
+        // Display books with indices for selection
+        for (int i = 0; i < books.Count; i++)
+            Console.WriteLine($"[{i + 1}] {books[i].Title} by {books[i].Author}");
 
 
-        //same code as earlier, established connection
-        using var connection = new SqliteConnection($"Data Source={dbPath}");
-        connection.Open();
+        //ask which book to remove and validate input
+        Console.Write("Enter the number of the book to remove: ");
+        if (!int.TryParse(Console.ReadLine(), out int index) || index < 1 || index > books.Count)
+        {
+            Console.WriteLine("Invalid selection.");
+            return;
+        }
 
-        string query = "DELETE FROM Books WHERE Id = @id;";
-        using var command = new SqliteCommand(query, connection);
-        command.Parameters.AddWithValue("@id", idToRemove);
-
-        int rowsAffected = command.ExecuteNonQuery();
-
-        if (rowsAffected > 0)
-            Console.WriteLine("Book removed successfully!");
-        else
-            Console.WriteLine("No book found with that ID.");
+        // Remove the selected book from the MongoDB collection using .DeleteOne
+        //use a lamda expression b => b.Id == books[index - 1].Id
+        var result = _books.DeleteOne(b => b.Id == books[index - 1].Id);
+        Console.WriteLine(result.DeletedCount > 0 ? "Book removed successfully!" : "No book found.");
     }
-
 
     public void UpdateBook()
     {
-        // Show the current books so the user knows which ID to pick
+        //show books and let user select which one to update
         ViewBooks();
+        var books = _books.Find(FilterDefinition<Book>.Empty).ToList();
 
-        //grab the id we want to update
-        Console.Write("Enter the ID of the book to update: ");
-        int idToUpdate = Convert.ToInt32(Console.ReadLine()!);
 
-        Console.Write("Enter new price (or press Enter to keep current): ");
-        string? priceInput = Console.ReadLine();
-
-        Console.Write("Enter new stock (or press Enter to keep current): ");
-        string? stockInput = Console.ReadLine();
-
-        // Build the SET clause dynamically based on what the user provided
-        var setClauses = new List<string>();
-        if (!string.IsNullOrWhiteSpace(priceInput)) setClauses.Add("Price = @price");
-        if (!string.IsNullOrWhiteSpace(stockInput)) setClauses.Add("Stock = @stock");
-
-        if (setClauses.Count == 0)
+        //ask which book to update and validate input
+        Console.Write("Enter the number of the book to update: ");
+        if (!int.TryParse(Console.ReadLine(), out int index) || index < 1 || index > books.Count)
         {
-            Console.WriteLine("No changes made.");
+            Console.WriteLine("Invalid selection.");
             return;
         }
 
 
-        //establish connection
-        using var connection = new SqliteConnection($"Data Source={dbPath}");
-        connection.Open();
+        //ask which fields to update and build the update definition
+        Console.Write("Enter new price (or press Enter to keep current): ");
+        string? priceInput = Console.ReadLine();
+        Console.Write("Enter new stock (or press Enter to keep current): ");
+        string? stockInput = Console.ReadLine();
 
-        // Combine the SET clauses into one UPDATE query
-        // UPDATE Books SET Price = @price, Stock = @stock WHERE Id = @id;
-        string query = $"UPDATE Books SET {string.Join(", ", setClauses)} WHERE Id = @id;";
+        // Build a list of update definitions based on user input
+        var updates = new List<UpdateDefinition<Book>>();
+        if (!string.IsNullOrWhiteSpace(priceInput)) updates.Add(Builders<Book>.Update.Set(b => b.Price, Convert.ToDouble(priceInput)));
+        if (!string.IsNullOrWhiteSpace(stockInput)) updates.Add(Builders<Book>.Update.Set(b => b.Stock, Convert.ToInt32(stockInput)));
 
-        using var command = new SqliteCommand(query, connection);
+        if (updates.Count == 0) { Console.WriteLine("No changes made."); return; }
 
-        //users parameters for safety, only add parameters for the fields they want to update
-        command.Parameters.AddWithValue("@id", idToUpdate);
-        if (!string.IsNullOrWhiteSpace(priceInput))
-            command.Parameters.AddWithValue("@price", Convert.ToDouble(priceInput));
-        if (!string.IsNullOrWhiteSpace(stockInput))
-            command.Parameters.AddWithValue("@stock", Convert.ToInt32(stockInput));
-
-
-        //doesnt return anything
-        int rowsAffected = command.ExecuteNonQuery();
-
-        if (rowsAffected > 0)
-            Console.WriteLine("Book updated successfully!");
-        else
-            Console.WriteLine("No book found with that ID.");
+        // Combine the update definitions and apply them to the selected book in the MongoDB collection
+        var result = _books.UpdateOne(b => b.Id == books[index - 1].Id, Builders<Book>.Update.Combine(updates));
+        Console.WriteLine(result.ModifiedCount > 0 ? "Book updated successfully!" : "No book found.");
     }
-
 
     public void ViewStats()
     {
-        //same as before established connection
-        using var connection = new SqliteConnection($"Data Source={dbPath}");
-        connection.Open();
 
-        // Use aggregate functions to summarize the inventory
-        //make our query
-        string query = @"
-            SELECT
-                COUNT(*)    AS TotalBooks,
-                AVG(Price)  AS AvgPrice,
-                SUM(Stock)  AS TotalStock,
-                MIN(Price)  AS CheapestPrice,
-                MAX(Price)  AS MostExpensivePrice
-            FROM Books;";
+        // Fetch all books from the MongoDB collection to calculate statistics
+        var books = _books.Find(FilterDefinition<Book>.Empty).ToList();
+        if (books.Count == 0) { Console.WriteLine("No books found."); return; }
 
-        //execute our query using SqliteCommand(action, connection)
-        using var command = new SqliteCommand(query, connection);
-
-        //reader, we want something back
-        using var reader = command.ExecuteReader();
-
-        // Read the results and display the stats
-        if (reader.Read())
-        {
-            int    totalBooks    = reader.GetInt32(0);
-            double avgPrice      = reader.GetDouble(1);
-            int    totalStock    = reader.GetInt32(2);
-            double cheapest      = reader.GetDouble(3);
-            double mostExpensive = reader.GetDouble(4);
-
-            Console.WriteLine("\n--- Inventory Stats ---");
-            Console.WriteLine($"Total unique titles : {totalBooks}");
-            Console.WriteLine($"Total books in stock: {totalStock}");
-            Console.WriteLine($"Average price       : ${avgPrice:F2}");
-            Console.WriteLine($"Cheapest book       : ${cheapest:F2}");
-            Console.WriteLine($"Most expensive book : ${mostExpensive:F2}");
-        }
+        // Display various statistics about the inventory, such as total unique titles, total stock, average price, cheapest and most expensive books
+        //F2 formats the price to 2 decimal places
+        //lamda expressions b => b.Stock
+        Console.WriteLine("\n--- Inventory Stats ---");
+        Console.WriteLine($"Total unique titles : {books.Count}");
+        Console.WriteLine($"Total books in stock: {books.Sum(b => b.Stock)}");
+        Console.WriteLine($"Average price       : ${books.Average(b => b.Price):F2}");
+        Console.WriteLine($"Cheapest book       : ${books.Min(b => b.Price):F2}");
+        Console.WriteLine($"Most expensive book : ${books.Max(b => b.Price):F2}");
     }
 
+    //Additional Feature: Real-time Change Notifications
+    //MongoDb supports Change Streams which is a built in feature thats give notifications for data changes
+    // Real-time change stream listener to display notifications when books are added, updated, or removed from the MongoDB collection  
+    private readonly CancellationTokenSource _cts = new();
 
+    // Start a background task to listen for changes in the MongoDB collection and display notifications in the console when changes occur  
+    public void StartChangeStreamListener()
+    {
+
+        //documentation
+        //https://www.mongodb.com/docs/manual/changeStreams/
+        var options = new ChangeStreamOptions
+        {
+            FullDocument = ChangeStreamFullDocumentOption.UpdateLookup
+        };
+
+        Task.Run(() =>
+        {
+            try
+            {
+                using var cursor = _books.Watch(options, _cts.Token);
+                foreach (var change in cursor.ToEnumerable(_cts.Token))
+                {
+                    string message = change.OperationType switch
+                    {
+                        ChangeStreamOperationType.Insert =>
+                            $"\n[NOTIFICATION] Book added: \"{change.FullDocument?.Title}\"",
+                        ChangeStreamOperationType.Update =>
+                            $"\n[NOTIFICATION] Book updated: \"{change.FullDocument?.Title}\"",
+                        ChangeStreamOperationType.Delete =>
+                            $"\n[NOTIFICATION] Book removed (ID: {change.DocumentKey["_id"]})",
+                        _ => $"\n[NOTIFICATION] Change detected: {change.OperationType}"
+                    };
+                    Console.WriteLine(message);
+                }
+            }
+            catch (OperationCanceledException) { }
+        });
+
+        Console.WriteLine("[INFO] Listening for real-time database changes...");
+    }
+
+    public void StopChangeStreamListener() => _cts.Cancel();
 }
