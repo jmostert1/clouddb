@@ -59,4 +59,4 @@ Recommended Extensions:
 - Add additional collections (e.g. customers, orders) and link them by ObjectId references
 - Add search/filter functionality (e.g. find books by genre or author)
 - Implement user authentication
-- Use MongoDB change streams to receive real-time notifications when data changes
+
